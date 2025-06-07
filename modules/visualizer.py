@@ -1,4 +1,7 @@
 import os
+import matplotlib
+# 确保在导入matplotlib.pyplot之前设置后端
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import pandas as pd
@@ -14,8 +17,12 @@ class Visualizer:
     
     def __init__(self):
         # 设置matplotlib中文显示
-        plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
-        plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+        #plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS']
+        #plt.rcParams['axes.unicode_minus'] = False
+        plt.rcParams['font.family'] = 'DeJavu Serif'
+        plt.rcParams['font.serif'] = ['Times New Roman']
+        # 避免内存泄漏警告
+        plt.rcParams['figure.max_open_warning'] = 0
     
     def create_charts(self, stock_data, indicators, stock_code, save_path):
         """
@@ -153,7 +160,7 @@ class Visualizer:
         
         # 保存图表
         plt.savefig(os.path.join(save_path, f"{stock_code}_technical_analysis.png"), dpi=300)
-        plt.close()
+        plt.close(fig)  # 关闭图形以释放内存
     
     def _create_pyecharts_charts(self, stock_data, indicators, stock_code, stock_name, save_path):
         """

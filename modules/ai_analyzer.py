@@ -1,213 +1,141 @@
 import os
-from PIL import Image
-from google import genai
-from google.genai import types
+from typing import Dict, Any, List, Optional
 import pandas as pd
-import json
-from datetime import datetime
+
+from .ai_providers import AIAnalyzerFactory, AIAnalyzerConfig
 
 class AIAnalyzer:
     """
-    AI分析类，负责使用Gemini API分析股票数据并预测未来走势
+    AI分析器主类，支持多个AI供应商
     """
     
-    def __init__(self):
-        # 初始化Gemini API
-        api_key = os.getenv("GEMINI_API_KEY")
-        if api_key:
-            self.client = genai.Client(api_key=api_key)
-        else:
-            print("警告: 未设置GEMINI_API_KEY环境变量，AI分析功能将无法使用")
-            print("请在.env文件中添加: GEMINI_API_KEY=your_api_key")
-    
-    def analyze(self, stock_data, indicators, financial_data, news_data, stock_code, save_path):
+    def __init__(self, provider: Optional[str] = None, api_key: Optional[str] = None, **kwargs):
         """
-        使用Gemini分析股票数据并预测未来走势
+        初始化AI分析器
         
-        参数:
-            stock_data (pandas.DataFrame): 股票历史数据
-            indicators (dict): 技术指标数据
-            financial_data (dict): 财务数据
-            news_data (list): 新闻数据
-            stock_code (str): 股票代码
-            
-        返回:
-            str: 分析结果文本
+        Args:
+            provider: AI供应商名称，如果为None则使用配置文件中的默认供应商
+            api_key: API密钥，如果为None则从环境变量获取
+            **kwargs: 其他配置参数
         """
-        if not os.getenv("GEMINI_API_KEY"):
-            return "错误: 未设置GEMINI_API_KEY环境变量，无法使用AI分析功能。请在.env文件中添加GEMINI_API_KEY。"
+        # 加载配置
+        self.config = AIAnalyzerConfig()
+        
+        # 确定使用的供应商
+        if provider is None:
+            provider = self.config.get_default_provider()
+        
+        # 获取供应商配置
+        provider_config = self.config.get_provider_config(provider)
+        provider_config.update(kwargs)  # 用传入的参数覆盖配置文件的参数
+        
+        # 创建分析器实例
+        try:
+            self.analyzer = AIAnalyzerFactory.create_analyzer(provider, api_key, **provider_config)
+            self.provider = provider
+            print(f"成功初始化 {AIAnalyzerFactory.SUPPORTED_PROVIDERS[provider]} 分析器")
+        except Exception as e:
+            print(f"初始化 {provider} 分析器失败: {e}")
+            # 尝试使用备用供应商
+            self._try_fallback_providers(api_key, **kwargs)
+    
+    def _try_fallback_providers(self, api_key: Optional[str], **kwargs):
+        """
+        尝试使用备用供应商
+        """
+        # 检查哪些供应商有可用的API密钥
+        available_keys = AIAnalyzerFactory.check_api_keys()
+        
+        for provider, has_key in available_keys.items():
+            if has_key and provider != self.config.get_default_provider():
+                try:
+                    provider_config = self.config.get_provider_config(provider)
+                    provider_config.update(kwargs)
+                    self.analyzer = AIAnalyzerFactory.create_analyzer(provider, api_key, **provider_config)
+                    self.provider = provider
+                    print(f"成功使用备用供应商 {AIAnalyzerFactory.SUPPORTED_PROVIDERS[provider]}")
+                    return
+                except Exception as e:
+                    print(f"备用供应商 {provider} 也失败: {e}")
+                    continue
+        
+        # 如果所有供应商都失败，抛出异常
+        raise RuntimeError("所有AI供应商都无法使用，请检查API密钥配置")
+    
+    def analyze(self, stock_data: pd.DataFrame, indicators: Dict[str, Any], 
+               financial_data: Dict[str, Any], news_data: List[Dict[str, Any]], 
+               stock_code: str, save_path: str) -> str:
+        """
+        分析股票数据并预测未来走势
+        
+        Args:
+            stock_data: 股票历史数据
+            indicators: 技术指标数据
+            financial_data: 财务数据
+            news_data: 新闻数据
+            stock_code: 股票代码
+            save_path: 保存路径
+            
+        Returns:
+            分析结果文本
+        """
+        if not hasattr(self, 'analyzer'):
+            return "错误: AI分析器未正确初始化，请检查API密钥配置"
         
         try:
-            # 获取股票名称
-            try:
-                import akshare as ak
-                stock_info = ak.stock_individual_info_em(symbol=stock_code)
-                if not stock_info.empty:
-                    stock_name = stock_info.loc[stock_info['item'] == '股票简称', 'value'].values[0]
-                else:
-                    stock_name = stock_code
-            except:
-                stock_name = stock_code
-            
-            # 准备分析数据
-            analysis_data = self._prepare_analysis_data(stock_data, indicators, financial_data, news_data, stock_code, stock_name)
-            
-            # 构建提示词
-            prompt = self._build_prompt(analysis_data, stock_code, stock_name)
-
-
-            iamge_path = os.path.join(save_path, f"charts/{stock_code}_technical_analysis.png")
-            image = Image.open(iamge_path)
-            
-            # 调用Gemini API
-            response = self.client.models.generate_content(
-                model="gemini-2.5-flash-preview-04-17",
-                config=types.GenerateContentConfig(
-                    system_instruction="你是一位专业的股票分析师，请基于以下数据分析股票的K线图和基本面情况，并预测上涨的概率。",
-                    temperature=0,
-                    top_p=0.95,
-                    top_k=1,
-                    candidate_count=1,
-                    seed=5,
-                    presence_penalty=0.0,
-                    frequency_penalty=0.0,
-                ),
-                contents=[image, prompt]
-            )
-            
-            # 处理响应
-            analysis_result = response.text
-            
-            # 添加时间戳和免责声明
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            disclaimer = "\n\n免责声明：本分析报告由AI自动生成，仅供参考，不构成任何投资建议。投资有风险，入市需谨慎。"
-            
-            full_result = f"# {stock_name}({stock_code}) AI预测概率\n\n生成时间: {current_time}\n\n{analysis_result}\n\n{disclaimer}"
-            
-            return full_result
-            
+            result = self.analyzer.analyze(stock_data, indicators, financial_data, news_data, stock_code, save_path)
+            # 在结果中添加使用的供应商信息
+            provider_name = AIAnalyzerFactory.SUPPORTED_PROVIDERS[self.provider]
+            result += f"\n\n---\n*本分析由 {provider_name} 提供*"
+            return result
         except Exception as e:
-            return f"AI分析过程中出错: {str(e)}"
+            return f"AI分析过程中出错 ({self.provider}): {str(e)}"
     
-    def _prepare_analysis_data(self, stock_data, indicators, financial_data, news_data, stock_code, stock_name):
+    def get_provider_info(self) -> Dict[str, str]:
         """
-        准备用于分析的数据
+        获取当前使用的供应商信息
         """
-        analysis_data = {}
-        
-        # 基本信息
-        analysis_data['股票代码'] = stock_code
-        analysis_data['股票名称'] = stock_name
-        
-        # 提取最近的价格数据
-        if not stock_data.empty:
-            latest_data = stock_data.iloc[-1]
-            earliest_data = stock_data.iloc[0]
-            
-            analysis_data['当前价格'] = float(latest_data['close'])
-            analysis_data['开盘价'] = float(latest_data['open'])
-            analysis_data['最高价'] = float(latest_data['high'])
-            analysis_data['最低价'] = float(latest_data['low'])
-            analysis_data['成交量'] = float(latest_data['volume'])
-            analysis_data['日期'] = latest_data['date'].strftime('%Y-%m-%d')
-            
-            # 计算区间涨跌幅
-            price_change = (latest_data['close'] - earliest_data['close']) / earliest_data['close'] * 100
-            analysis_data['区间涨跌幅'] = round(price_change, 2)
-            
-            # 提取最近N天的收盘价和成交量趋势
-            recent_days = min(30, len(stock_data))
-            analysis_data['最近价格趋势'] = stock_data['close'].tail(recent_days).tolist()
-            analysis_data['最近成交量趋势'] = stock_data['volume'].tail(recent_days).tolist()
-            analysis_data['最近日期'] = [d.strftime('%Y-%m-%d') for d in stock_data['date'].tail(recent_days)]
-        
-        # 提取关键技术指标
-        if indicators:
-            latest_idx = -1  # 最新数据索引
-            
-            # 移动平均线
-            analysis_data['MA5'] = float(indicators['MA5'].iloc[latest_idx]) if 'MA5' in indicators and not indicators['MA5'].empty else None
-            analysis_data['MA10'] = float(indicators['MA10'].iloc[latest_idx]) if 'MA10' in indicators and not indicators['MA10'].empty else None
-            analysis_data['MA20'] = float(indicators['MA20'].iloc[latest_idx]) if 'MA20' in indicators and not indicators['MA20'].empty else None
-            analysis_data['MA30'] = float(indicators['MA30'].iloc[latest_idx]) if 'MA30' in indicators and not indicators['MA30'].empty else None
-            
-            # MACD
-            analysis_data['MACD'] = float(indicators['MACD'].iloc[latest_idx]) if 'MACD' in indicators and not indicators['MACD'].empty else None
-            analysis_data['MACD_signal'] = float(indicators['MACD_signal'].iloc[latest_idx]) if 'MACD_signal' in indicators and not indicators['MACD_signal'].empty else None
-            analysis_data['MACD_hist'] = float(indicators['MACD_hist'].iloc[latest_idx]) if 'MACD_hist' in indicators and not indicators['MACD_hist'].empty else None
-            
-            # KDJ
-            analysis_data['KDJ_K'] = float(indicators['K'].iloc[latest_idx]) if 'K' in indicators and not indicators['K'].empty else None
-            analysis_data['KDJ_D'] = float(indicators['D'].iloc[latest_idx]) if 'D' in indicators and not indicators['D'].empty else None
-            analysis_data['KDJ_J'] = float(indicators['J'].iloc[latest_idx]) if 'J' in indicators and not indicators['J'].empty else None
-            
-            # RSI
-            analysis_data['RSI6'] = float(indicators['RSI6'].iloc[latest_idx]) if 'RSI6' in indicators and not indicators['RSI6'].empty else None
-            analysis_data['RSI12'] = float(indicators['RSI12'].iloc[latest_idx]) if 'RSI12' in indicators and not indicators['RSI12'].empty else None
-            analysis_data['RSI24'] = float(indicators['RSI24'].iloc[latest_idx]) if 'RSI24' in indicators and not indicators['RSI24'].empty else None
-            
-            # 布林带
-            analysis_data['BOLL_upper'] = float(indicators['BOLL_upper'].iloc[latest_idx]) if 'BOLL_upper' in indicators and not indicators['BOLL_upper'].empty else None
-            analysis_data['BOLL_middle'] = float(indicators['BOLL_middle'].iloc[latest_idx]) if 'BOLL_middle' in indicators and not indicators['BOLL_middle'].empty else None
-            analysis_data['BOLL_lower'] = float(indicators['BOLL_lower'].iloc[latest_idx]) if 'BOLL_lower' in indicators and not indicators['BOLL_lower'].empty else None
-        
-        # 提取关键财务数据
-        if financial_data:
-            analysis_data['财务数据'] = financial_data
-        
-        # 提取新闻数据
-        if news_data:
-            analysis_data['新闻数据'] = news_data
-        
-        return analysis_data
+        if hasattr(self, 'analyzer'):
+            return {
+                'provider': self.provider,
+                'provider_name': AIAnalyzerFactory.SUPPORTED_PROVIDERS[self.provider],
+                'model': getattr(self.analyzer, 'model', 'Unknown')
+            }
+        return {'provider': 'None', 'provider_name': 'None', 'model': 'None'}
     
-    def _build_prompt(self, analysis_data, stock_code, stock_name):
+    @classmethod
+    def get_available_providers(cls) -> Dict[str, bool]:
         """
-        构建提示词
+        获取所有可用的AI供应商及其状态
+        
+        Returns:
+            供应商状态字典 {provider_name: is_available}
         """
-        # 将分析数据转换为JSON字符串
-        data_json = json.dumps(analysis_data, ensure_ascii=False, indent=2)
+        available_keys = AIAnalyzerFactory.check_api_keys()
+        providers_info = AIAnalyzerFactory.get_available_providers()
         
-        # 构建提示词
-        prompt = f"""
-        你是一位专业的股票分析师，请基于以下数据分析 {stock_name}({stock_code}) 的技术面和基本面情况，并预测未来可能的走势。
+        result = {}
+        for provider_id, provider_name in providers_info.items():
+            result[provider_name] = available_keys.get(provider_id, False)
         
-        数据信息如下：
-        ```json
-        {data_json}
-        ```
-        
-        请提供以下分析：
-        1. 股票基本情况概述
-        2. 技术指标分析（包括移动平均线、MACD、KDJ、RSI、布林带等）
-        3. 基本面分析（基于财务数据）
-        4. 市场情绪分析（基于新闻数据）
-        5. 预测未来一周上涨的概率（范围为0-100，0为下跌，100为上涨, 只输出数字，不要输出其他任何内容）
-        6. 投资建议和风险提示
-        
-        请用专业、客观的语言进行分析，避免过度乐观或悲观的偏见。分析应该基于数据，而不是个人情感。
-        请使用markdown格式输出，使用适当的标题、列表和强调，使分析报告更易于阅读。
+        return result
+    
+    @classmethod
+    def show_provider_status(cls):
         """
-        
-        return prompt
-
-    def _build_score_prompt(self, analysis_data, stock_code, stock_name):
+        显示所有供应商的状态
         """
-        构建提示词
-        """
-        # 将分析数据转换为JSON字符串
-        data_json = json.dumps(analysis_data, ensure_ascii=False, indent=2)
+        print("AI供应商状态:")
+        print("-" * 40)
         
-        # 构建提示词
-        prompt = f"""
-        你是一位专业的股票分析师，请基于以下数据分析 {stock_name}({stock_code}) 的K线图和基本面情况，并预测未来可能的走势。
+        available_providers = cls.get_available_providers()
+        for provider_name, is_available in available_providers.items():
+            status = "✅ 可用" if is_available else "❌ 未配置"
+            print(f"{provider_name}: {status}")
         
-        数据信息如下：
-        ```json
-        {data_json}
-        ```
-        
-        请输出股票未来一周的上涨概率，范围为0-100，0为下跌，100为上涨, 只输出数字，不要输出其他任何内容。
-        """
-        
-        return prompt
+        print("-" * 40)
+        print("请在.env文件中配置相应的API密钥:")
+        print("OPENAI_API_KEY=your_openai_key")
+        print("SILICONFLOW_API_KEY=your_siliconflow_key")
+        print("DEEPSEEK_API_KEY=your_deepseek_key")
+        print("GEMINI_API_KEY=your_gemini_key")

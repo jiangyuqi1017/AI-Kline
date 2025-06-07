@@ -1,0 +1,45 @@
+{
+  "default_provider": "siliconflow",
+  "providers": {
+    "openai": {
+      "model": "gpt-4o",
+      "max_tokens": 4000,
+      "temperature": 0.1,
+      "base_url": null,
+      "description": "OpenAI GPT-4o模型，具备强大的多模态分析能力"
+    },
+    "siliconflow": {
+      "model": "deepseek-ai/DeepSeek-V3",
+      "max_tokens": 4000,
+      "temperature": 0.7,
+      "base_url": "https://api.siliconflow.cn/v1",
+      "description": "Deepseek V3模型，中文理解能力强，性价比高"
+    },
+    "deepseek": {
+      "model": "deepseek-chat",
+      "max_tokens": 4000,
+      "temperature": 0.1,
+      "base_url": "https://api.deepseek.com/v1",
+      "description": "DeepSeek-V3模型，数学推理和逻辑分析能力出色"
+    },
+    "gemini": {
+      "model": "gemini-2.5-flash-preview-04-17",
+      "temperature": 0,
+      "top_p": 0.95,
+      "top_k": 1,
+      "description": "Google Gemini 2.5模型，多模态能力强，分析全面"
+    }
+  },
+  "analysis_settings": {
+    "enable_image_analysis": true,
+    "enable_news_analysis": true,
+    "enable_financial_analysis": true,
+    "max_news_items": 10,
+    "analysis_language": "zh-CN"
+  },
+  "fallback_strategy": {
+    "enable_fallback": true,
+    "fallback_order": ["gemini", "openai", "siliconflow", "deepseek"],
+    "max_retry_attempts": 3
+  }
+}

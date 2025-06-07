@@ -4,104 +4,527 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI看线 - A股技术分析与AI预测工具</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .provider-card {
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .provider-card:hover {
+            border-color: #007bff;
+            box-shadow: 0 4px 8px rgba(0,123,255,0.1);
+        }
+        .provider-card.selected {
+            border-color: #007bff;
+            background-color: #f8f9ff;
+        }
+        .provider-card.unavailable {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .provider-status {
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        .status-available { color: #28a745; }
+        .status-unavailable { color: #dc3545; }
+        .analysis-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .provider-info {
+            background: #e3f2fd;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+        .stats-card {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
 </head>
 <body>
-    <div class="container-fluid">
-        <header class="p-3 mb-4 bg-primary text-white">
-            <div class="container">
-                <div class="d-flex align-items-center justify-content-between">
-                    <h1 class="mb-0">AI看线</h1>
-                    <p class="mb-0">A股技术分析与AI预测工具</p>
-                </div>
-            </div>
-        </header>
-
-        <div class="container">
-            <div class="row">
-                <!-- 左侧表单区域 -->
-                <div class="col-md-4">
-                    <div class="card">
-                        <div class="card-header bg-primary text-white">
-                            <h5 class="mb-0">股票分析</h5>
-                        </div>
-                        <div class="card-body">
-                            <form id="analyzeForm">
-                                <div class="mb-3">
-                                    <label for="stockCode" class="form-label">股票代码</label>
-                                    <input type="text" class="form-control" id="stockCode" name="stock_code" placeholder="例如: 000001" required>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-10">
+                <div class="card shadow-lg">
+                    <div class="card-header bg-primary text-white text-center">
+                        <h1><i class="fas fa-chart-line"></i> AI看线</h1>
+                        <p class="mb-0">A股技术分析与AI预测工具 - 支持多AI供应商</p>
+                    </div>
+                    <div class="card-body">
+                        <!-- AI供应商状态显示 -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5><i class="fas fa-robot"></i> AI供应商状态</h5>
+                                <div id="providersStatus" class="row">
+                                    <!-- 动态加载供应商状态 -->
                                 </div>
-                                <div class="mb-3">
-                                    <label for="period" class="form-label">分析周期</label>
-                                    <select class="form-select" id="period" name="period">
-                                        <option value="1年" selected>1年</option>
-                                        <option value="6个月">6个月</option>
-                                        <option value="3个月">3个月</option>
-                                        <option value="1个月">1个月</option>
-                                    </select>
-                                </div>
-                                <button type="submit" class="btn btn-primary w-100">开始分析</button>
-                            </form>
-                        </div>
-                    </div>
-
-                    <!-- 股票基本信息卡片 -->
-                    <div id="stockInfoCard" class="card mt-4 d-none">
-                        <div class="card-header bg-info text-white">
-                            <h5 class="mb-0">股票基本信息</h5>
-                        </div>
-                        <div class="card-body" id="stockInfoBody">
-                            <!-- 股票信息将通过JavaScript动态填充 -->
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 右侧结果区域 -->
-                <div class="col-md-8">
-                    <!-- 加载中提示 -->
-                    <div id="loadingIndicator" class="text-center my-5 d-none">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">加载中...</span>
-                        </div>
-                        <p class="mt-2">正在分析，请稍候...</p>
-                    </div>
-
-                    <!-- 图表区域 -->
-                    <div id="chartsArea" class="d-none">
-                        <div class="card mb-4">
-                            <div class="card-header bg-success text-white">
-                                <h5 class="mb-0">交互式K线图</h5>
-                            </div>
-                            <div class="card-body" id="chartImages">
-                                <!-- 图表将通过JavaScript动态填充 -->
                             </div>
                         </div>
-                    </div>
 
-                    <!-- AI分析结果 -->
-                    <div id="analysisResult" class="card mb-4 d-none">
-                        <div class="card-header bg-warning text-dark">
-                            <h5 class="mb-0">AI分析结果</h5>
+                        <!-- 分析表单 -->
+                        <form id="analysisForm">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="stockCode" class="form-label">
+                                            <i class="fas fa-code"></i> 股票代码
+                                        </label>
+                                        <input type="text" class="form-control" id="stockCode" 
+                                               placeholder="例如: 000001" required>
+                                        <div class="form-text">请输入6位股票代码</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="period" class="form-label">
+                                            <i class="fas fa-calendar"></i> 分析周期
+                                        </label>
+                                        <select class="form-select" id="period">
+                                            <option value="1年">1年</option>
+                                            <option value="6个月">6个月</option>
+                                            <option value="3个月">3个月</option>
+                                            <option value="1个月">1个月</option>
+                                            <option value="1周">1周</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- AI供应商选择 -->
+                            <div class="mb-3">
+                                <label class="form-label">
+                                    <i class="fas fa-brain"></i> AI供应商选择
+                                </label>
+                                <div id="aiProviderSelection" class="row">
+                                    <!-- 动态生成供应商选择卡片 -->
+                                </div>
+                                <div class="form-text">选择用于分析的AI供应商，自动选择将使用最佳可用供应商</div>
+                            </div>
+
+                            <div class="text-center">
+                                <button type="submit" class="btn btn-primary btn-lg" id="analyzeBtn">
+                                    <i class="fas fa-search"></i> 开始分析
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary ms-2" id="refreshProviders">
+                                    <i class="fas fa-sync"></i> 刷新状态
+                                </button>
+                            </div>
+                        </form>
+
+                        <!-- 加载指示器 -->
+                        <div id="loadingIndicator" class="text-center mt-4" style="display: none;">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">分析中...</span>
+                            </div>
+                            <p class="mt-2">AI正在分析中，请耐心等待...</p>
+                            <div id="analysisSteps" class="mt-3">
+                                <div class="progress">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                         role="progressbar" style="width: 0%"></div>
+                                </div>
+                                <div id="currentStep" class="mt-2 text-muted"></div>
+                            </div>
                         </div>
-                        <div class="card-body">
-                            <div id="analysisText" class="analysis-content p-3 bg-light rounded"></div>
+
+                        <!-- 结果显示区域 -->
+                        <div id="results" style="display: none;">
+                            <!-- 分析统计信息 -->
+                            <div id="analysisStats" class="row mb-4">
+                                <!-- 动态生成统计卡片 -->
+                            </div>
+
+                            <!-- AI供应商信息 -->
+                            <div id="providerInfo" class="provider-info">
+                                <!-- 显示使用的AI供应商信息 -->
+                            </div>
+
+                            <!-- 股票基本信息 -->
+                            <div id="stockInfo" class="analysis-section">
+                                <h5><i class="fas fa-info-circle"></i> 股票基本信息</h5>
+                                <div id="stockInfoContent">
+                                    <!-- 动态加载股票信息 -->
+                                </div>
+                            </div>
+
+                            <!-- 图表展示 -->
+                            <div id="charts" class="analysis-section">
+                                <h5><i class="fas fa-chart-bar"></i> K线图和技术指标</h5>
+                                <div id="chartsContent">
+                                    <!-- 动态加载图表 -->
+                                </div>
+                            </div>
+
+                            <!-- AI分析结果 -->
+                            <div id="aiAnalysis" class="analysis-section">
+                                <h5><i class="fas fa-robot"></i> AI分析结果</h5>
+                                <div id="aiAnalysisContent" class="border p-3 bg-white rounded">
+                                    <!-- 动态加载AI分析结果 -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 错误显示 -->
+                        <div id="errorAlert" class="alert alert-danger mt-4" style="display: none;">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <span id="errorMessage"></span>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
-        <footer class="mt-5 p-3 bg-light text-center">
-            <div class="container">
-                <p class="mb-0">© 2025 AI看线 - A股技术分析与AI预测工具</p>
-                <p class="mb-0 small text-muted">免责声明：本工具提供的分析和预测仅供参考，不构成任何投资建议。投资有风险，入市需谨慎。</p>
-            </div>
-        </footer>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        let selectedProvider = 'auto';
+        let providersData = {};
+
+        // 页面加载时获取供应商状态
+        document.addEventListener('DOMContentLoaded', function() {
+            loadProvidersStatus();
+        });
+
+        // 加载AI供应商状态
+        function loadProvidersStatus() {
+            fetch('/api/providers/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        providersData = data.providers;
+                        renderProvidersStatus();
+                        renderProviderSelection();
+                    }
+                })
+                .catch(error => {
+                    console.error('获取供应商状态失败:', error);
+                });
+        }
+
+        // 渲染供应商状态
+        function renderProvidersStatus() {
+            const statusContainer = document.getElementById('providersStatus');
+            statusContainer.innerHTML = '';
+            
+            Object.entries(providersData).forEach(([providerName, isAvailable]) => {
+                const statusHtml = `
+                    <div class="col-md-3 col-sm-6 mb-2">
+                        <div class="stats-card">
+                            <div class="provider-status ${isAvailable ? 'status-available' : 'status-unavailable'}">
+                                <i class="fas ${isAvailable ? 'fa-check-circle' : 'fa-times-circle'}"></i>
+                                ${providerName}
+                            </div>
+                            <div class="small">${isAvailable ? '可用' : '未配置'}</div>
+                        </div>
+                    </div>
+                `;
+                statusContainer.innerHTML += statusHtml;
+            });
+        }
+
+        // 渲染AI供应商选择
+        function renderProviderSelection() {
+            const selectionContainer = document.getElementById('aiProviderSelection');
+            selectionContainer.innerHTML = '';
+            
+            // 自动选择选项
+            const autoCard = `
+                <div class="col-md-3 col-sm-6 mb-2">
+                    <div class="provider-card" data-provider="auto" onclick="selectProvider('auto')">
+                        <div class="text-center">
+                            <i class="fas fa-magic fa-2x text-primary"></i>
+                            <div class="mt-2"><strong>自动选择</strong></div>
+                            <div class="small text-muted">智能选择最佳可用供应商</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            selectionContainer.innerHTML += autoCard;
+            
+            // 具体供应商选项
+            const providerIcons = {
+                'OpenAI': 'fa-brain',
+                'SiliconFlow': 'fa-microchip',
+                'DeepSeek': 'fa-search',
+                'Gemini': 'fa-gem'
+            };
+            
+            Object.entries(providersData).forEach(([providerName, isAvailable]) => {
+                const providerId = providerName.toLowerCase().replace(/\s+/g, '');
+                const iconClass = providerIcons[providerName] || 'fa-robot';
+                const cardClass = isAvailable ? 'provider-card' : 'provider-card unavailable';
+                const onclick = isAvailable ? `onclick="selectProvider('${providerId}')"` : '';
+                
+                const providerCard = `
+                    <div class="col-md-3 col-sm-6 mb-2">
+                        <div class="${cardClass}" data-provider="${providerId}" ${onclick}>
+                            <div class="text-center">
+                                <i class="fas ${iconClass} fa-2x ${isAvailable ? 'text-primary' : 'text-muted'}"></i>
+                                <div class="mt-2"><strong>${providerName}</strong></div>
+                                <div class="provider-status ${isAvailable ? 'status-available' : 'status-unavailable'}">
+                                    ${isAvailable ? '✓ 可用' : '✗ 未配置'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                selectionContainer.innerHTML += providerCard;
+            });
+            
+            // 默认选择自动
+            selectProvider('auto');
+        }
+
+        // 选择AI供应商
+        function selectProvider(provider) {
+            // 移除之前的选择
+            document.querySelectorAll('.provider-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            
+            // 选择新的供应商
+            const selectedCard = document.querySelector(`[data-provider="${provider}"]`);
+            if (selectedCard && !selectedCard.classList.contains('unavailable')) {
+                selectedCard.classList.add('selected');
+                selectedProvider = provider;
+            }
+        }
+
+        // 刷新供应商状态
+        document.getElementById('refreshProviders').addEventListener('click', function() {
+            this.innerHTML = '<i class="fas fa-sync fa-spin"></i> 刷新中...';
+            loadProvidersStatus();
+            setTimeout(() => {
+                this.innerHTML = '<i class="fas fa-sync"></i> 刷新状态';
+            }, 1000);
+        });
+
+        // 表单提交处理
+        document.getElementById('analysisForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const stockCode = document.getElementById('stockCode').value.trim();
+            const period = document.getElementById('period').value;
+            
+            if (!stockCode) {
+                showError('请输入股票代码');
+                return;
+            }
+            
+            // 显示加载指示器
+            showLoading();
+            
+            // 提交分析请求
+            const formData = new FormData();
+            formData.append('stock_code', stockCode);
+            formData.append('period', period);
+            formData.append('ai_provider', selectedProvider);
+            
+            fetch('/analyze', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                if (data.success) {
+                    showResults(data);
+                } else {
+                    showError(data.error || '分析失败');
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showError('网络错误: ' + error.message);
+            });
+        });
+
+        // 显示加载状态
+        function showLoading() {
+            document.getElementById('loadingIndicator').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('errorAlert').style.display = 'none';
+            
+            // 模拟分析步骤
+            const steps = [
+                '获取股票数据...',
+                '计算技术指标...',
+                '生成图表...',
+                'AI分析中...',
+                '生成报告...'
+            ];
+            
+            let currentStepIndex = 0;
+            const stepInterval = setInterval(() => {
+                if (currentStepIndex < steps.length) {
+                    document.getElementById('currentStep').textContent = steps[currentStepIndex];
+                    const progress = ((currentStepIndex + 1) / steps.length) * 100;
+                    document.querySelector('.progress-bar').style.width = progress + '%';
+                    currentStepIndex++;
+                } else {
+                    clearInterval(stepInterval);
+                }
+            }, 1000);
+        }
+
+        // 隐藏加载状态
+        function hideLoading() {
+            document.getElementById('loadingIndicator').style.display = 'none';
+        }
+
+        // 显示分析结果
+        function showResults(data) {
+            // 显示统计信息
+            if (data.data_stats) {
+                renderAnalysisStats(data.data_stats);
+            }
+            
+            // 显示AI供应商信息
+            if (data.provider_info) {
+                renderProviderInfo(data.provider_info);
+            }
+            
+            // 获取并显示股票基本信息
+            fetch(`/stock_info/${data.stock_code}`)
+                .then(response => response.json())
+                .then(stockData => {
+                    if (stockData.success) {
+                        renderStockInfo(stockData.data);
+                    }
+                });
+            
+            // 显示图表
+            if (data.charts && data.charts.length > 0) {
+                renderCharts(data.charts, data.stock_code);
+            }
+            
+            // 显示AI分析结果
+            if (data.analysis_result) {
+                renderAIAnalysis(data.analysis_result);
+            }
+            
+            document.getElementById('results').style.display = 'block';
+        }
+
+        // 渲染分析统计信息
+        function renderAnalysisStats(stats) {
+            const statsContainer = document.getElementById('analysisStats');
+            statsContainer.innerHTML = `
+                <div class="col-md-3 col-sm-6 mb-2">
+                    <div class="stats-card">
+                        <i class="fas fa-chart-line text-primary fa-2x"></i>
+                        <div class="mt-2"><strong>${stats.data_points}</strong></div>
+                        <div class="small text-muted">数据点</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6 mb-2">
+                    <div class="stats-card">
+                        <i class="fas fa-calculator text-success fa-2x"></i>
+                        <div class="mt-2"><strong>${stats.indicators_count}</strong></div>
+                        <div class="small text-muted">技术指标</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6 mb-2">
+                    <div class="stats-card">
+                        <i class="fas fa-newspaper text-info fa-2x"></i>
+                        <div class="mt-2"><strong>${stats.news_items}</strong></div>
+                        <div class="small text-muted">新闻条数</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6 mb-2">
+                    <div class="stats-card">
+                        <i class="fas fa-file-invoice-dollar text-warning fa-2x"></i>
+                        <div class="mt-2"><strong>${stats.financial_items}</strong></div>
+                        <div class="small text-muted">财务项目</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 渲染AI供应商信息
+        function renderProviderInfo(providerInfo) {
+            const providerContainer = document.getElementById('providerInfo');
+            providerContainer.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-robot fa-2x text-primary me-3"></i>
+                    <div>
+                        <div><strong>AI供应商:</strong> ${providerInfo.provider_name}</div>
+                        <div class="text-muted"><strong>使用模型:</strong> ${providerInfo.model}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 渲染股票基本信息
+        function renderStockInfo(stockInfo) {
+            const stockInfoContainer = document.getElementById('stockInfoContent');
+            let infoHtml = '<div class="row">';
+            
+            Object.entries(stockInfo).forEach(([key, value], index) => {
+                if (index % 3 === 0 && index > 0) {
+                    infoHtml += '</div><div class="row">';
+                }
+                infoHtml += `
+                    <div class="col-md-4 mb-2">
+                        <strong>${key}:</strong> ${value}
+                    </div>
+                `;
+            });
+            
+            infoHtml += '</div>';
+            stockInfoContainer.innerHTML = infoHtml;
+        }
+
+        // 渲染图表
+        function renderCharts(charts, stockCode) {
+            const chartsContainer = document.getElementById('chartsContent');
+            let chartsHtml = '';
+            
+            charts.forEach(chart => {
+                if (chart.endsWith('.png')) {
+                    chartsHtml += `
+                        <div class="mb-3">
+                            <img src="/output/charts/${chart}" class="img-fluid" alt="K线图">
+                        </div>
+                    `;
+                } else if (chart.endsWith('.html')) {
+                    chartsHtml += `
+                        <div class="mb-3">
+                            <iframe src="/output/charts/${chart}" width="100%" height="600" frameborder="0"></iframe>
+                        </div>
+                    `;
+                }
+            });
+            
+            chartsContainer.innerHTML = chartsHtml;
+        }
+
+        // 渲染AI分析结果
+        function renderAIAnalysis(analysisResult) {
+            const analysisContainer = document.getElementById('aiAnalysisContent');
+            // 使用marked.js渲染Markdown
+            analysisContainer.innerHTML = marked.parse(analysisResult);
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('errorAlert').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+        }
+    </script>
 </body>
-</html> 
+</html>

@@ -1,11 +1,46 @@
-akshare>=1.10.0
-pandas>=1.3.0
-numpy>=1.20.0
-matplotlib>=3.4.0
-ta-lib>=0.4.0
-google-genai
-python-dotenv>=0.19.0
-tqdm>=4.62.0
+# AI看线项目依赖包
+
+# 核心数据获取和处理
+akshare>=1.12.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# 技术指标计算
+talib>=0.4.25
+
+# 可视化
+matplotlib>=3.7.0
 pyecharts>=2.0.0
-requests>=2.26.0
-flask>=2.0.0
+plotly>=5.15.0
+
+# 图像处理
+Pillow>=10.0.0
+
+# Web框架
+flask>=2.3.0
+
+# AI供应商SDK
+# OpenAI
+openai>=1.12.0
+
+# Google Gemini
+google-genai>=0.5.0
+
+# HTTP请求库（用于SiliconFlow和DeepSeek）
+requests>=2.31.0
+
+# 环境变量管理
+python-dotenv>=1.0.0
+
+# 异步支持
+asyncio>=3.4.3
+
+# 进度条
+tqdm>=4.65.0
+
+# MCP支持
+mcp>=1.0.0
+
+# 其他工具
+lxml>=4.9.0
+beautifulsoup4>=4.12.0
